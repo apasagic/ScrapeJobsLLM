@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head><title>Text Processor</title></head>
+<body>
+    <form method="post">
+        <textarea name="user_input" placeholder="Enter text here"></textarea><br>
+        <button type="submit">Submit</button>
+    </form>
+
+    {% if result %}
+        <h2>Result:</h2>
+        <p>{{ result }}</p>
+    {% endif %}
+</body>
+</html>

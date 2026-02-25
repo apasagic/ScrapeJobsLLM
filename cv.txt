@@ -1,0 +1,31 @@
+I am a control system engineer with a Master degree, working in the field of electrical engineering with Matlab and ocassionaly python for over 10 years. 
+
+I have learned past 1.5 years Machine learning, mainly thru the means of Andrew Ng's courses on coursera. 
+
+I finished a ML specialization as well as some more advanced ML courses and courses on CNN and timeseries such as RNN. I wish to also finish courses on MLOps and databases and get a bit more familiarized with use of Dockers over next few months.
+
+I have participated in some entry level Kaggle competitions for example Housing prices, using XGboost and scoring quite good (among top 20-25%) in my first competitions.
+
+I did some projects in my free time, some in combination with my current employment topics, such as utilizing RNN to unknown identify system behaviour, or using FF neural network (as ARMAX) 
+
+I have written some Jupyter Notebooks using RNN and CNN on moving FFT of audio signal to recognize and categorize sounds (such as different drums). I would like to use MIDI libraries to generate/farm audio data and then use this to expand my script to be able to transcribe hummed or whistled melody into notes.
+
+I did some anomaly detection on the vibration sensor (I connected IMU to STM32 microcontroller and logged data via python script communicated thru serial) that I used to detect when espresso machine is out of water. (just as a demonstration of the algorithm)
+
+I posses basic understanding of Attention mechanisms as well, as well as word embeddings etc but did not works with language processing as much.
+
+Lately I try to learn reinforcement learning, and I implemented from the scratch all the basic algorithms such as q-learning, deepQ, actor-critic (I plant to continue into PPO and more complex/state-of-the-art), using the seminal papers as references.
+
+I maintain a well structured github repo with all the different shared RL project, trying to use classes to make shared scripts more modular. I implemented policy gradients on Cart Pole and Actor-critic and DeepQ on pong and breakout.
+
+Once I have a firm grasp on basics, I want to migrate to Isaac gym/Lab and use these algorithms on more advanced bipedal or quadrupedal robots etc.
+
+I would like to get bit more familiar with the OpenCV to get more hands on experience with a computer vision and perhaps combine it with something like LLM models (e.g. describe what you see). I would also like to learn how to work with agents bit more.
+
+I also work in Matlab in sort of Robotics and would like to show I can use RL on practical examples of the tethered flight robot, as something I have done in the frame of actual employment I had.
+
+I would like to search for employment in the field in next half a year, but I feel insecure about my capabilities and I am not sure what should I focus on.
+
+Should I try to focus on one field or is it ok, or even desirable to be a bit more spread out and have more general knowledge. 
+
+I work with Keras/tensor flow, should I get familiar with PyTorch first as well?

@@ -1,0 +1,12 @@
+paths:
+  chrome: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+  chromedriver: "C:\\Users\\a.pasagic\\Python Projects\\ScrapeJobsLLM\\externals\\chromedriver.exe"
+  model: "C:\\Users\\a.pasagic\\Python Projects\\ScrapeJobsLLM\\externals\\tinyllama-1.1b-chat-v1.0.Q3_K_L.gguf"
+
+model:
+  n_ctx: 2048
+  n_threads: 4
+
+api:
+  openrouter_key: "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"
+  openrouter_url: "https://openrouter.ai/api/v1"
