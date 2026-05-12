@@ -8,5 +8,15 @@ model:
   n_threads: 4
 
 api:
-  openrouter_key: "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"
+  openrouter_key: ""
   openrouter_url: "https://openrouter.ai/api/v1"
+  rapidapi_key: ""
+  rapidapi_host: "jsearch.p.rapidapi.com"
+
+email:
+  smtp_from: ""
+  smtp_password: ""
+  notify_to: ""
+
+settings:
+  clear_chroma_db: true

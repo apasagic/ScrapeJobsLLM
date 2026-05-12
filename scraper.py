@@ -1,3 +1,4 @@
+import os
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -9,15 +10,18 @@ import time
 import tiktoken
 import openai
 import json
-from utilities import scrape_job_remoteok, generate_html_report
+from utilities import request_JSearch_API, scrape_job_remoteok, generate_html_report
 
 class JobScraper:
-    def __init__(self, config, my_cv, batch_size=10):
+    def __init__(self, config, conn, headers, my_cv, batch_size=10):
         
         self.config = config
         self.driver = self.get_driver()
+        openrouter_key = os.environ.get("OPENROUTER_KEY") or config['api'].get('openrouter_key')
+        if not openrouter_key:
+            raise ValueError("OpenRouter API key is not set. Set OPENROUTER_KEY environment variable or api.openrouter_key in config.yaml")
         self.client = openai.OpenAI(
-                    api_key=config['api']['openrouter_key'],
+                    api_key=openrouter_key,
                     base_url=config['api']['openrouter_url'],
                    )
         
@@ -28,6 +32,8 @@ class JobScraper:
         self.jobs_enchanced = []
         self.my_cv = my_cv
         self.batch_size = batch_size
+        self.conn = conn
+        self.headers = headers
 
     def get_driver(self):
         chrome_options = Options()
@@ -37,7 +43,8 @@ class JobScraper:
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--no-sandbox")
-        service = Service(executable_path=self.config['paths']['chromedriver'])
+        # Use ChromeDriverManager to automatically download the correct version
+        service = Service(ChromeDriverManager().install())
         
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
         self.driver.get('http://google.com/')
@@ -45,13 +52,19 @@ class JobScraper:
         return self.driver
 
     def get_openai_client(self):
-        openai.api_key = config['api']['openrouter_key']
+        openrouter_key = os.environ.get("OPENROUTER_KEY") or self.config['api'].get('openrouter_key')
+        if not openrouter_key:
+            raise ValueError("OpenRouter API key is not set. Set OPENROUTER_KEY environment variable or api.openrouter_key in config.yaml")
+        openai.api_key = openrouter_key
         return openai
     
     def scrape_job(self, website):
 
         if website == "remoteok":
            jobs =  scrape_job_remoteok(self.driver, self.client)
+           return self.compress_description(jobs, self.my_cv, self.client)
+        elif website == "JSearch":
+           jobs = request_JSearch_API(self.conn, self.headers)
            return self.compress_description(jobs, self.my_cv, self.client)
 
     def compress_description(self,jobs,my_cv,client):
@@ -111,7 +124,7 @@ class JobScraper:
 
         # Send to LLM
         response = client.chat.completions.create(
-        model="deepseek/deepseek-r1-0528-qwen3-8b",
+        model="anthropic/claude-sonnet-4",
         messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}

@@ -1,3 +1,6 @@
+import http.client
+import os
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -16,22 +19,39 @@ from utilities import scrape_job_remoteok, generate_html_report, send_email, rem
 #from llama_cpp import Llama
 from email.message import EmailMessage
 
-def process_text(user_input):
+def process_text(user_input, clear_chroma_db=None):
 
     
     # Load configuration
     with open("config.yaml") as f:
         config = yaml.safe_load(f)
     
+    if clear_chroma_db is None:
+        clear_chroma_db = config.get("settings", {}).get("clear_chroma_db", True)
+    
     # Your CV to match job fitness
     with open("cv.txt", "r", encoding="utf-8") as f:
         my_cv = f.read()
     
-    user_email = "dr.amir.pasagic@gmail.com"
+    rapidapi_key = os.environ.get("RAPIDAPI_KEY") or config.get("api", {}).get("rapidapi_key")
+    rapidapi_host = config.get("api", {}).get("rapidapi_host", "jsearch.p.rapidapi.com")
+    if not rapidapi_key:
+        raise ValueError("RapidAPI key is not set. Set RAPIDAPI_KEY environment variable or api.rapidapi_key in config.yaml")
+
+    headers = {
+       'x-rapidapi-key': rapidapi_key,
+       'x-rapidapi-host': rapidapi_host,
+       'Content-Type': "application/json"
+    }
+
+    conn = http.client.HTTPSConnection(rapidapi_host)
     
-    job_scraper  = scraper.JobScraper(config = config, my_cv=my_cv)
+    user_email = os.environ.get("NOTIFY_EMAIL") or config.get("email", {}).get("notify_to")
+    if not user_email:
+        raise ValueError("Notification email is not set. Set NOTIFY_EMAIL environment variable or email.notify_to in config.yaml")
     
-    jobs,jobs_query_text = job_scraper.scrape_job("remoteok")
+    job_scraper  = scraper.JobScraper(config = config, conn=conn, headers=headers, my_cv=my_cv)
+    jobs,jobs_query_text = job_scraper.scrape_job("JSearch")
     
     # Extract the job rows
     #job_html_snippet = "\n".join(str(card) for card in job_cards[:36])  # 20 jobs max
@@ -49,7 +69,7 @@ def process_text(user_input):
     
     # Call the LLM
     response = job_scraper.client.chat.completions.create(
-        model="deepseek/deepseek-r1-0528-qwen3-8b",  # or another from openrouter.ai/models
+        model="anthropic/claude-sonnet-4",  # or another from openrouter.ai/models
         messages=[
             {"role": "user", "content": prompt}
         ]
@@ -58,7 +78,11 @@ def process_text(user_input):
     LLM_Summary = response.choices[0].message.content
     
     vector_db = chroma_db.ChromaDB()
-    vector_db.add_to_vector_db(remove_duplicates(jobs))
+    if clear_chroma_db:
+        vector_db.clear_collection()
+        vector_db.add_to_vector_db(remove_duplicates(jobs))
+    else:
+        vector_db.add_unique_jobs(remove_duplicates(jobs))
     
     # Output
     #print(LLM_Summary)
@@ -78,4 +102,4 @@ def process_text(user_input):
 if __name__ == "__main__":
     # Example usage
     user_input = "What are the most common skills in machine learning jobs?"
-    process_text(user_input)
+    process_text(user_input, clear_chroma_db=True)

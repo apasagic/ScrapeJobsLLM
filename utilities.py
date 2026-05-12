@@ -10,7 +10,62 @@ import tiktoken
 import openai
 import json
 import smtplib
+import http.client
+import os
 from email.message import EmailMessage
+
+def request_JSearch_API(conn, headers):
+    conn.request("GET", "/search-v2?query=machine%20learning%20remote&num_pages=10&date_posted=all", headers=headers)
+
+    res = conn.getresponse()
+    raw_data = res.read()
+
+    try:
+        payload = json.loads(raw_data)
+    except json.JSONDecodeError as e:
+        print(f"Failed to decode JSearch response: {e}")
+        return []
+
+    jobs = payload.get("data", {}).get("jobs", [])
+    formatted_jobs = [format_jsearch_job(job) for job in jobs]
+    return formatted_jobs
+
+
+def format_jsearch_job(job):
+    tags = []
+    if isinstance(job.get("job_employment_types"), list):
+        tags.extend([t for t in job["job_employment_types"] if t])
+    if isinstance(job.get("job_benefits_strings"), list):
+        tags.extend([t for t in job["job_benefits_strings"] if t])
+    if isinstance(job.get("job_salary_string"), str) and job.get("job_salary_string"):
+        tags.append(job["job_salary_string"])
+
+    tags = list(dict.fromkeys(tags))
+
+    salary = job.get("job_salary_string") or job.get("job_salary") or "N/A"
+    if isinstance(salary, dict):
+        salary = salary.get("job_salary_string") or "N/A"
+
+    location = job.get("job_location") or job.get("job_city") or job.get("job_state") or "Remote"
+    if job.get("job_is_remote"):
+        location = "Remote"
+
+    return {
+        "id": job.get("job_id", "N/A"),
+        "title": job.get("job_title", "N/A"),
+        "link": job.get("job_apply_link", "N/A"),
+        "description": job.get("job_description", "N/A"),
+        "experience": "N/A",
+        "seniority": "N/A",
+        "skills": "N/A",
+        "tags": ', '.join(tags) if tags else "N/A",
+        "salary": salary,
+        "location": location,
+        "source": job.get("job_publisher", "JSearch"),
+        "job_fitness": "N/A",
+        "comment": "N/A"
+    }
+
 
 def extract_chroma_entry(results):
     
@@ -28,29 +83,35 @@ def extract_chroma_entry(results):
     return formatted_results
 
 def remove_duplicates(jobs):
-     # Remove duplicates based on title + link
+     # Remove duplicates based on id and source
     seen = set()
     unique_jobs = []
 
     for job in jobs:
-       key = (job["id"])  # use more fields if needed
+       key = (job.get("id"), job.get("source", ""))
        if key not in seen:
           seen.add(key)
           unique_jobs.append(job)
     
     return unique_jobs
 
-def send_email(to_email, subject, html_content):
+def send_email(to_email, subject, html_content, smtp_from=None, smtp_user=None, smtp_password=None):
+    smtp_from = smtp_from or os.environ.get("SMTP_FROM")
+    smtp_user = smtp_user or os.environ.get("SMTP_USER")
+    smtp_password = smtp_password or os.environ.get("SMTP_PASSWORD")
+
+    if not smtp_from or not smtp_user or not smtp_password:
+        raise ValueError("SMTP credentials are required to send email. Provide SMTP_FROM, SMTP_USER, and SMTP_PASSWORD.")
+
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = "your_email@gmail.com"
+    msg["From"] = smtp_from
     msg["To"] = to_email
     msg.set_content("Your email client does not support HTML.")
     msg.add_alternative(html_content, subtype='html')
 
-    # Send using Gmail SMTP
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login("your_email@gmail.com", "your_app_password")  # Use App Password
+        smtp.login(smtp_user, smtp_password)
         smtp.send_message(msg)
 
 def count_tokens(text, model="gpt-3.5-turbo"):

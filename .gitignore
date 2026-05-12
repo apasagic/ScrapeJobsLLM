@@ -1,0 +1,11 @@
+# Ignore local config and secrets
+config.yaml
+.env
+
+# Ignore generated files
+jobs.html
+__pycache__/
+*.py[cod]
+
+# Ignore local Chroma DB storage
+chroma_db/chroma.sqlite3
