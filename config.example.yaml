@@ -13,6 +13,12 @@ api:
   rapidapi_key: ""
   rapidapi_host: "jsearch.p.rapidapi.com"
 
+storage:
+  adapter: "chroma"  # or "supabase"
+  chroma_path: "chroma_db/"
+  supabase_url: ""
+  supabase_key: ""
+
 email:
   smtp_from: ""
   smtp_password: ""

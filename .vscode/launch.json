@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Flask app_web.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/app_web.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "WEB_PORT": "5001",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "HTTP_PROXY": "",
+        "HTTPS_PROXY": "",
+        "ALL_PROXY": "",
+        "NO_PROXY": "localhost,127.0.0.1,::1"
+      }
+    }
+  ]
+}

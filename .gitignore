@@ -4,8 +4,17 @@ config.yaml
 
 # Ignore generated files
 jobs.html
+jobs2.html
+jobs_old.html
 __pycache__/
 *.py[cod]
 
 # Ignore local Chroma DB storage
-chroma_db/chroma.sqlite3
+chroma_db/
+chroma_db_archived_*/
+
+# Ignore local run logs
+*.log
+
+# Ignore local external binaries and models
+externals/

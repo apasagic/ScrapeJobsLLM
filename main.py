@@ -1,5 +1,10 @@
 import http.client
 import os
+import sys
+
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -13,8 +18,9 @@ import yaml
 import json
 import tiktoken
 import scraper
-import chroma_db
-from utilities import scrape_job_remoteok, generate_html_report, send_email, remove_duplicates,extract_chroma_entry
+from utilities import summarize_job_search_results, scrape_job_remoteok, generate_html_report, send_email, extract_chroma_entry
+from service.job_service import JobService
+from service.storage_adapter import ChromaStorageAdapter, SupabaseStorageAdapter
 
 #from llama_cpp import Llama
 from email.message import EmailMessage
@@ -51,55 +57,89 @@ def process_text(user_input, clear_chroma_db=None):
         raise ValueError("Notification email is not set. Set NOTIFY_EMAIL environment variable or email.notify_to in config.yaml")
     
     job_scraper  = scraper.JobScraper(config = config, conn=conn, headers=headers, my_cv=my_cv)
-    jobs,jobs_query_text = job_scraper.scrape_job("JSearch")
+    
+    # Scrape jobs from both sources
+    jobs_remoteok, _ = job_scraper.scrape_job("remoteok")
+    jobs_jsearch, jobs_query_text = job_scraper.scrape_job("JSearch")
+    jobs = jobs_remoteok + jobs_jsearch
     
     # Extract the job rows
     #job_html_snippet = "\n".join(str(card) for card in job_cards[:36])  # 20 jobs max
     
-    prompt = f"""
-    Please analyze the following list of remote machine-learning jobs and write in summary, what are most sought skills, what are the most common job titles, and what are the most common tags.
-    I am a junior machine learning engineer, and I want to know what skills I should focus on to get a job in this field.
-    I am also curious which particular fields in machine learning are most in demand. Here is the list of jobs:
+    search_query = user_input.strip() if user_input else "machine learning remote"
+
+    storage_config = config.get("storage", {})
+    adapter_type = storage_config.get("adapter", "chroma")
     
-    {jobs_query_text},
-    
-    Please take in account information about my CV, which is provided below:
-    {my_cv}
-    """
-    
-    # Call the LLM
-    response = job_scraper.client.chat.completions.create(
-        model="anthropic/claude-sonnet-4",  # or another from openrouter.ai/models
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-    
-    LLM_Summary = response.choices[0].message.content
-    
-    vector_db = chroma_db.ChromaDB()
-    if clear_chroma_db:
-        vector_db.clear_collection()
-        vector_db.add_to_vector_db(remove_duplicates(jobs))
+    if adapter_type == "chroma":
+        storage = ChromaStorageAdapter(path=storage_config.get("chroma_path", "chroma_db/"))
+    elif adapter_type == "supabase":
+        storage = SupabaseStorageAdapter(
+            url=storage_config.get("supabase_url"),
+            key=storage_config.get("supabase_key")
+        )
     else:
-        vector_db.add_unique_jobs(remove_duplicates(jobs))
+        raise ValueError(f"Unknown storage adapter: {adapter_type}")
     
-    # Output
-    #print(LLM_Summary)
-    html_report = generate_html_report(extract_chroma_entry(vector_db.query_similar("Jobs related to time series analysis")), LLM_Summary)
+    job_service = JobService(storage)
+    job_service.ingest_jobs(jobs, clear=clear_chroma_db)
+
+    search_results = job_service.search_jobs(search_query, top_k=10)
+    matched_jobs = extract_chroma_entry(search_results)
+
+    summary_text = summarize_job_search_results(matched_jobs, search_query, my_cv, job_scraper.client)
+
+    html_report = generate_html_report(matched_jobs, summary_text)
     
     with open("jobs.html", "w", encoding="utf-8") as f:
         f.write(html_report)
     
     print("✅ jobs.html created with a beautiful table!")
     
+    # Display dashboard summary
+    print("\n" + "="*50)
+    print("📊 DASHBOARD SUMMARY")
+    print("="*50)
+    
+    from service.analytics_service import AnalyticsService
+    analytics = AnalyticsService(storage)
+    
+    total_jobs = storage.count_jobs()
+    print(f"📈 Total Jobs in Database: {total_jobs}")
+    
+    if total_jobs > 0:
+        area_dist = analytics.get_area_distribution()
+        print(f"🌍 Top Areas: {dict(list(area_dist.items())[:5])}")
+        
+        top_skills = analytics.get_top_skills(limit=5)
+        print(f"🛠️  Top Skills: {top_skills}")
+        
+        top_libs = analytics.get_top_libraries(limit=5)
+        print(f"📚 Top Libraries: {top_libs}")
+    
+    print(f"🔍 Search Query: '{search_query}'")
+    print(f"🎯 Found {len(matched_jobs)} matching jobs")
+    
+    print(f"\n📄 Summary: {summary_text[:200]}...")
+    
+    print(f"\n📁 Results exported to: jobs.html")
+    print("="*50)
+    
+    # Skip email for testing
+    # send_email(user_email, "Your Job Report", html_report)
+    print("📧 Email sending skipped for testing")
+    
     
     #print(vector_db.query_similar("Electric vehicle battery management system"))
     #print(vector_db.query_similar("Time series forecasting"))
-    
-    send_email(user_email, "Your Job Report", html_report)
 
 if __name__ == "__main__":
     # Example usage
-    user_input = "What are the most common skills in machine learning jobs?"
-    process_text(user_input, clear_chroma_db=True)
+    user_input = input("Enter your job search query (e.g., 'machine learning engineer'): ").strip()
+    if not user_input:
+        user_input = "machine learning remote"
+    
+    clear_db_input = input("Clear existing database? (y/n, default n): ").strip().lower()
+    clear_chroma_db = clear_db_input == 'y'
+    
+    process_text(user_input, clear_chroma_db=clear_chroma_db)

@@ -1,5 +1,7 @@
-import chromadb
-from sentence_transformers import SentenceTransformer
+def vector_id_for_job(job):
+    source = str(job.get("source", "unknown")).strip() or "unknown"
+    job_id = str(job.get("id", "unknown")).strip() or "unknown"
+    return f"{source}:{job_id}"
 
 class ChromaDB:
     """
@@ -7,11 +9,21 @@ class ChromaDB:
     It allows adding job descriptions, deduplication, deletion, basic stats, and similarity search.
     """
     def __init__(self, path="chroma_db/", collection_name="jobs", model_name="all-MiniLM-L6-v2"):
+        import chromadb
+        from chromadb.api.shared_system_client import SharedSystemClient
+        from sentence_transformers import SentenceTransformer
+
         self.path = path
         self.collection_name = collection_name
+        SharedSystemClient.clear_system_cache()
         self.client = chromadb.PersistentClient(path=self.path)
         self.collection = self.client.get_or_create_collection(self.collection_name)
-        self.model = SentenceTransformer(model_name)
+        try:
+            self.model = SentenceTransformer(model_name, local_files_only=True)
+        except TypeError:
+            self.model = SentenceTransformer(model_name)
+        except Exception:
+            self.model = SentenceTransformer(model_name)
 
     def count(self):
         return self.collection.count()
@@ -28,8 +40,10 @@ class ChromaDB:
 
     def clear_collection(self):
         """Remove all existing job data from the persistent Chroma collection."""
-        self.client.delete_collection(self.collection_name)
-        self.collection = self.client.get_or_create_collection(self.collection_name)
+        existing = self.collection.get(include=[])
+        ids = existing.get("ids", [])
+        if ids:
+            self.collection.delete(ids=ids)
 
     def _existing_job_keys(self):
         result = self.get_all(limit=self.count())
@@ -62,8 +76,8 @@ class ChromaDB:
         if not jobs:
             return []
 
-        docs = [job["description"] for job in jobs]
-        ids = [job["id"] for job in jobs]
+        docs = [job.get("description", "") for job in jobs]
+        ids = [vector_id_for_job(job) for job in jobs]
         embeddings = self.model.encode(docs).tolist()
 
         self.collection.add(

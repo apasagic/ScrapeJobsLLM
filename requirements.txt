@@ -1,0 +1,15 @@
+beautifulsoup4
+chromadb
+flask
+llama-cpp-python
+openai
+pandas
+plotly
+pyyaml
+requests
+selenium
+sentence-transformers
+streamlit
+supabase
+tiktoken
+webdriver-manager

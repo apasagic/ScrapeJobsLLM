@@ -1,21 +1,14 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from llama_cpp import Llama
-from bs4 import BeautifulSoup
 import re
 import time
-import tiktoken
-import openai
 import json
 import smtplib
-import http.client
 import os
+from urllib.parse import quote
 from email.message import EmailMessage
 
-def request_JSearch_API(conn, headers):
-    conn.request("GET", "/search-v2?query=machine%20learning%20remote&num_pages=10&date_posted=all", headers=headers)
+def request_JSearch_API(conn, headers, query="machine learning remote", num_pages=1):
+    encoded_query = quote(query or "machine learning remote")
+    conn.request("GET", f"/search-v2?query={encoded_query}&num_pages={num_pages}&date_posted=all", headers=headers)
 
     res = conn.getresponse()
     raw_data = res.read()
@@ -29,6 +22,38 @@ def request_JSearch_API(conn, headers):
     jobs = payload.get("data", {}).get("jobs", [])
     formatted_jobs = [format_jsearch_job(job) for job in jobs]
     return formatted_jobs
+
+
+def parse_fitness_score(value):
+    if value is None:
+        return 0.0
+    match = re.search(r"\d+(?:\.\d+)?", str(value))
+    if not match:
+        return 0.0
+    return max(0.0, min(float(match.group()), 10.0))
+
+
+def is_senior_role(job):
+    text = " ".join(
+        str(job.get(key, ""))
+        for key in ("title", "seniority", "experience", "description", "tags")
+    ).lower()
+    senior_terms = ("senior", "sr.", "staff", "principal", "lead", "manager", "architect")
+    if any(term in text for term in senior_terms):
+        return True
+    years = re.findall(r"(\d+)\s*\+?\s*(?:years|yrs)", text)
+    return any(int(year) >= 5 for year in years)
+
+
+def sort_jobs_by_fitness(jobs):
+    return sorted(
+        jobs,
+        key=lambda job: (
+            parse_fitness_score(job.get("job_fitness")),
+            -float(job.get("distance", 99) or 99),
+        ),
+        reverse=True,
+    )
 
 
 def format_jsearch_job(job):
@@ -67,18 +92,38 @@ def format_jsearch_job(job):
     }
 
 
-def extract_chroma_entry(results):
-    
-    # Structure into list of dicts
+def extract_chroma_entry(results, max_distance=1.7):
+    """Flatten vector-search results from storage adapters into job dicts."""
     formatted_results = []
 
-    for i in range(len(results['ids'][0])):
+    if not results:
+        return formatted_results
 
-        print(results['distances'][0][i])
+    if "results" in results:
+        return results["results"]
 
-        if(results["distances"][0][i] > 1.7):  # Adjust threshold as needed
+    ids = results.get("ids") or [[]]
+    metadatas = results.get("metadatas") or [[]]
+    distances = results.get("distances") or [[]]
+
+    if not metadatas:
+        return formatted_results
+
+    for i, metadata in enumerate(metadatas[0]):
+        distance = distances[0][i] if distances and distances[0] and i < len(distances[0]) else None
+
+        if distance is not None and distance > max_distance:
             continue
-        formatted_results.append(results["metadatas"][0][i])
+
+        job = dict(metadata or {})
+        if "vector_id" not in job and ids and ids[0] and i < len(ids[0]):
+            job["vector_id"] = ids[0][i]
+        if distance is not None:
+            job["distance"] = distance
+        job.setdefault("company", "N/A")
+        job.setdefault("url", job.get("link", "N/A"))
+        job.setdefault("link", job.get("url", "N/A"))
+        formatted_results.append(job)
     
     return formatted_results
 
@@ -115,6 +160,8 @@ def send_email(to_email, subject, html_content, smtp_from=None, smtp_user=None, 
         smtp.send_message(msg)
 
 def count_tokens(text, model="gpt-3.5-turbo"):
+    import tiktoken
+
     enc = tiktoken.encoding_for_model(model)
     return len(enc.encode(text))
 
@@ -129,10 +176,49 @@ def prompt_llama(llm, prompt):
     return output["choices"][0]["text"]
 
 def get_openai_client(api_key):
+    import openai
+
     openai.api_key = api_key
     return openai
 
+
+def summarize_job_search_results(jobs, query, cv_text, client):
+    if not jobs:
+        return f"No jobs were found for the query '{query}'."
+
+    # If client is None (test mode), return a simple summary
+    if client is None:
+        job_titles = [job.get('title', 'Unknown') for job in jobs[:3]]
+        return f"Found {len(jobs)} jobs for query '{query}'. Top matches: {', '.join(job_titles)}. (Test mode - no LLM summary)"
+
+    prompt = f"""
+You are a helpful assistant that summarizes machine learning job search results.
+
+Query: {query}
+
+CV:
+{cv_text}
+
+Jobs:
+{json.dumps(jobs, indent=2)}
+
+Write a short summary of the top jobs, including the most relevant skills, seniority level, and why these jobs are a good match for the CV provided. Keep it concise and focused.
+"""
+
+    response = client.chat.completions.create(
+        model="anthropic/claude-sonnet-4",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.3,
+    )
+
+    return response.choices[0].message.content
+
+
 def scrape_job_remoteok(driver,client):
+    from bs4 import BeautifulSoup
+
     url = "https://remoteok.io/remote-machine-learning-jobs"
     driver.get(url)
     time.sleep(3)
