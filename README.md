@@ -10,6 +10,9 @@ The goal is not only to find job ads, but to understand which roles fit a given 
 
 ![Job ingestion UI](docs/images/web-ui.png)
 
+<img width="1069" height="369" alt="image" src="https://github.com/user-attachments/assets/13fb5326-acb8-4c9d-afb3-a8d46e94c62d" />
+
+
 ### Analytics View
 
 ![Analytics UI](docs/images/analytics-ui.png)
